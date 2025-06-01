@@ -1,9 +1,8 @@
 # Video Downloader Connector Extension 
 
-![Extension Icon](icons/nadecon-96.png)
+![Extension Icon](icons/nadecon-96.png) A Firefox extension that detects media on webpages and sends it to [**Nadeko~don**](https://github.com/izaz4141/Nadeko-don) for downloading.
 
 
-A Firefox extension that detects media on webpages and sends it to a companion desktop application for downloading.
 
 ## Features
 

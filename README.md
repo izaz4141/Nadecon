@@ -16,10 +16,10 @@ A Firefox extension that detects media on webpages and sends it to a companion d
 
 ## Installation
 
-1. Download the extension in [**GitHub Releases**](https://github.com)
+1. Download the extension in [**GitHub Releases**](https://github.com/izaz4141/Nadecon/releases/latest/download/NadeCon.zip)
 2. Go to [**Manage your Extension**](about:addons)
-3. Click on the 󰢻  and select **Install Add-on from File...**
-4. Select downloaded file
+3. Click on the ⚙ and select **Install Add-on from File...**
+4. Select the downloaded NadeCon.zip
 
 ## Usage
 

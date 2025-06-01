@@ -1,0 +1,24 @@
+{
+  "manifest_version": 2,
+  "name": "NadeCon",
+  "version": "1.0.0",
+  "description": "Detects media from pages and connects to Nadeko Downloader",
+  "icons": {
+    "96": "icons/nadecon-96.png"
+  },
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "webRequest",
+    "contextMenus",
+    "*://localhost/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["popup/popup.js"],
+    "run_at": "document_idle"
+  }]
+}

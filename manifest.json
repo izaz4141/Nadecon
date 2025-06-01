@@ -20,5 +20,11 @@
     "matches": ["<all_urls>"],
     "js": ["popup/popup.js"],
     "run_at": "document_idle"
-  }]
+  }],
+  "browser_specific_settings": {
+  "gecko": {
+    "id": "glicole@nadecon",
+    "strict_min_version": "58.0"
+  }
+}
 }

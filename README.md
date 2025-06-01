@@ -1,6 +1,7 @@
-# Video Downloader Connector Extension
+# Video Downloader Connector Extension 
 
-![Extension Icon](icons/nadecon-115.png)
+![Extension Icon](icons/nadecon-96.png)
+
 
 A Firefox extension that detects media on webpages and sends it to a companion desktop application for downloading.
 
@@ -16,10 +17,12 @@ A Firefox extension that detects media on webpages and sends it to a companion d
 
 ## Installation
 
-1. Download the extension in [**GitHub Releases**](https://github.com/izaz4141/Nadecon/releases/latest/download/NadeCon.zip)
-2. Go to [**Manage your Extension**](about:addons)
-3. Click on the ⚙ and select **Install Add-on from File...**
-4. Select the downloaded NadeCon.zip
+1. Download the extension in [**GitHub Releases**](https://github.com/izaz4141/Nadecon/releases/latest/download/NadeCon.xpi)
+2. Go to [about:config](about:config)
+3. Turn `xpinstall.signatures.required` off ( sorry no verification yet )
+4. Go to [**Manage your Extension**](about:addons)
+5. Click on the ⚙ and select **Install Add-on from File...**
+6. Select the downloaded NadeCon.xpi
 
 ## Usage
 

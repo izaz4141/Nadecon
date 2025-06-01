@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "NadeCon",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Detects media from pages and connects to Nadeko Downloader",
   "icons": {
     "96": "icons/nadecon-96.png"

@@ -401,6 +401,14 @@ browser.runtime.onMessage.addListener((message) => {
         observer.disconnect();
         console.debug("[Content Script] MutationObserver disconnected as requested by background.");
     }
+    if (message.type === "closeAllPopups") {
+        console.debug("[Content Script] Received closeAllPopups message. Clearing all popups.");
+        const allPopups = document.querySelectorAll('.media-detector-popup-item');
+        allPopups.forEach(popup => {
+            popup.remove();
+        });
+        activePopupUrls.clear(); // Clear the set of active URLs
+    }
 });
 
 console.debug("[Content Script] Media Detector content script loaded.");

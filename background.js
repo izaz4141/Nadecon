@@ -9,8 +9,8 @@ const localhostStatusCache = {
     checkInterval: 5000 // Cache for 5 seconds
 };
 
-// Threshold for considering a video/audio file a "fragment" based on Content-Length (5 MB)
-const FRAGMENT_SIZE_THRESHOLD_BYTES = 5 * 1024 * 1024; 
+// Threshold for considering a video/audio file a "fragment" based on Content-Length (2 MB)
+const FRAGMENT_SIZE_THRESHOLD_BYTES = 2 * 1024 * 1024; 
 
 /**
  * Initializes the Nadeko server port from storage.

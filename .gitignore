@@ -1,0 +1,25 @@
+# Compiled files, logs, and temporary directories
+*.log
+*.tmp
+*.bak
+*.xpi
+.DS_Store # macOS specific
+Thumbs.db # Windows specific
+
+
+# Webpack or other build outputs (adjust if your build folder is named differently)
+dist/
+build/
+
+# Firefox specific files
+.web-ext-config.js # web-ext config file
+web-ext-artifacts/ # Directory where web-ext stores packaged extensions (.xpi files)
+
+# Editor-specific files
+.idea/ # IntelliJ IDEA
+.vscode/ # VS Code
+*.sublime-project
+*.sublime-workspace
+
+# Environment variables
+.env

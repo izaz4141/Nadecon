@@ -1,26 +1,36 @@
 {
   "manifest_version": 2,
   "name": "NadeCon",
-  "version": "1.0.1",
+  "version": "2.0.0",
+  "author": "Glicole",
   "description": "Detects media from pages and connects to Nadeko Downloader",
   "icons": {
     "96": "icons/nadecon-96.png"
   },
   "permissions": [
     "activeTab",
+    "downloads",
+    "storage",
     "tabs",
     "webRequest",
+    "webRequestBlocking",
     "contextMenus",
-    "*://localhost/*"
+    "*://localhost/*",
+    "<all_urls>"
   ],
   "background": {
     "scripts": ["background.js"]
   },
   "content_scripts": [{
     "matches": ["<all_urls>"],
-    "js": ["popup/popup.js"],
+    "js": ["content.js"],
     "run_at": "document_idle"
   }],
+  "browser_action": {
+    "default_icon": "icons/nadecon-96.png",
+    "default_popup": "popup/popup.html",
+    "default_title": "NadeCon"
+  },
   "browser_specific_settings": {
   "gecko": {
     "id": "glicole@nadecon",

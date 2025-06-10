@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NadeCon Configuration</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            width: 400px; /* Matched with browser.windows.create width */
+            padding: 1.5rem;
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: #334155;
+        }
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="p-6">
+    <h1 class="text-2xl font-bold mb-6 text-gray-800">NadeCon Configuration</h1>
+
+    <div class="mb-4">
+        <label for="serverPort" class="block text-sm font-medium text-gray-700 mb-2">Server Port:</label>
+        <input type="number" id="serverPort" min="1" max="65535" value="12345"
+               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+        <p id="portError" class="text-red-500 text-xs mt-1 hidden">Port must be between 1 and 65535.</p>
+    </div>
+
+    <button id="saveBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-150 ease-in-out">
+        Save Settings
+    </button>
+
+    <div id="statusMessage" class="mt-4 p-3 rounded-md text-sm text-center hidden">
+        <!-- Status messages like "Settings saved!" -->
+    </div>
+
+    <script src="config.js"></script>
+</body>
+</html>

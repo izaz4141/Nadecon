@@ -1,207 +1,245 @@
-// Add styles for the popup
-const style = document.createElement('style');
-style.textContent = `
-#media-detector-popup {
-position: fixed;
-bottom: 20px;
-left: 20px;
-background: #2a2a2e;
-color: white;
-padding: 15px 20px;
-border-radius: 12px;
-box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
-display: flex;
-align-items: center;
-gap: 15px;
-z-index: 10000;
-border-left: 4px solid #0a84ff;
-animation: fadeIn 0.5s ease-out;
-font-family: Arial, sans-serif;
-}
+// window/main.js
 
-#media-detector-popup .popup-icon {
-font-size: 1.8rem;
-}
+const urlListDiv = document.getElementById('urlList');
+const noUrlsMessage = document.getElementById('noUrlsMessage');
+const messageBox = document.getElementById('messageBox');
+const clearUrlsBtn = document.getElementById('clearUrlsBtn');
+const serverStatusText = document.getElementById('serverStatusText');
+const serverStatusReloadBtn = document.getElementById('serverStatusReloadBtn');
+const configBtn = document.getElementById('configBtn');
 
-#media-detector-popup .popup-content h3 {
-margin: 0 0 5px 0;
-font-size: 1rem;
-}
+let currentTabId = null;
 
-#media-detector-popup .popup-content p {
-margin: 0;
-font-size: 0.9rem;
-opacity: 0.8;
-}
+/**
+ * Displays a temporary message in the message box.
+ * @param {string} message - The message to display.
+ * @param {string} type - 'success', 'error', 'info' (optional, for styling)
+ */
+function showMessageBox(message, type = 'info') {
+    messageBox.textContent = message;
+    messageBox.className = `fixed bottom-4 left-1/2 -translate-x-1/2 p-2 text-sm rounded-lg shadow-lg transition-opacity duration-300 ease-out opacity-0`;
 
-#media-detector-popup .download-btn {
-font-size: 0.9rem;
-background: rgba(255, 255, 255, 0.1);
-color: #fff;
-border: none;
-border-radius: 6px;
-cursor: pointer;
-transition: background 0.3s;
-
-}
-
-#media-detector-popup .close-btn {
-background: rgba(255, 255, 255, 0.1);
-border: none;
-color: #fff;
-width: 28px;
-height: 28px;
-border-radius: 50%;
-cursor: pointer;
-display: flex;
-align-items: center;
-justify-content: center;
-transition: background 0.3s;
-}
-
-#media-detector-popup .download-btn:hover ,
-#media-detector-popup .close-btn:hover {
-background: rgba(255, 255, 255, 0.2);
-}
-
-#media-detector-popup .download-btn.error {
-background: #ff0039;
-animation: shake 0.5s;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
+    if (type === 'success') {
+        messageBox.classList.add('bg-green-600', 'text-white');
+    } else if (type === 'error') {
+        messageBox.classList.add('bg-red-600', 'text-white');
+    } else {
+        messageBox.classList.add('bg-gray-800', 'text-white');
     }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-`;
-document.head.appendChild(style);
 
-// Detect media playback
-document.addEventListener('play', function(e) {
-    if (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO') {
-        // Remove existing popup if any
-        const existingPopup = document.getElementById('media-detector-popup');
-        if (existingPopup) existingPopup.remove();
+    messageBox.classList.remove('hidden');
+    void messageBox.offsetWidth;
+    messageBox.classList.remove('opacity-0');
+    messageBox.classList.add('opacity-100');
 
-        // Create new popup
-        const popup = document.createElement('div');
-        popup.id = 'media-detector-popup';
-
-        // Determine media type
-        const mediaType = e.target.tagName.toLowerCase();
-        const icon = mediaType === 'video' ? '🎬' : '🔊';
-        const typeText = mediaType === 'video' ? 'Video' : 'Audio';
-
-        popup.innerHTML = `
-        <div class="popup-icon">${icon}</div>
-        <div class="popup-content">
-        <h3>Media Detected</h3>
-        <button class="download-btn">Download ${typeText}</button>
-        </div>
-        <button class="close-btn">✕</button>
-        `;
-
-        document.body.appendChild(popup);
-
-        // Add close functionality
-        popup.querySelector('.close-btn').addEventListener('click', () => {
-            console.log("Closed");
-            popup.remove();
-        });
-
-        // Add send URL functionality
-        const downloadButton = popup.querySelector('.download-btn');
-        downloadButton.addEventListener('click', () => {
-            // Disable button and show sending state
-            downloadButton.disabled = true;
-            downloadButton.textContent = 'Sending...';
-
-            // Send the URL to the background script
-            browser.runtime.sendMessage({
-                type: 'send-to-nadeko',
-                url: window.location.href
-            }).then(() => {
-                // Success state
-                downloadButton.textContent = '✓ URL Sent!';
-                downloadButton.style.background = '#30e60b';
-
-                // Remove popup after delay
-                setTimeout(() => {
-                    popup.remove();
-                }, 1500);
-            }).catch(error => {
-                  handleDownloadError(downloadButton, popup);
-             });
-        });
-
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (document.body.contains(popup)) {
-                popup.remove();
-            }
-        }, 5000);
-    }
-}, true);
-
-// Handle send errors
-function handleDownloadError( downloadButton, popup) {
-    // Update button to show error
-    downloadButton.textContent = '✗ Failed! Connecting with App';
-    downloadButton.style.background = '#ff0039';
-    downloadButton.classList.add('error');
-    downloadButton.disabled = false;
-
-    // Add new click event for retry
-    const newHandler = () => {
-        downloadButton.removeEventListener('click', newHandler);
-        downloadButton.click();
-    };
-    downloadButton.addEventListener('click', newHandler);
-
-    // Revert button after 5 seconds
     setTimeout(() => {
-        if (popup.isConnected) {
-            downloadButton.textContent = 'Send URL to App';
-            downloadButton.style.background = '#0a84ff';
-            downloadButton.classList.remove('error');
+        messageBox.classList.remove('opacity-100');
+        messageBox.classList.add('opacity-0');
+        setTimeout(() => {
+            messageBox.classList.add('hidden');
+        }, 300);
+    }, 2000);
+}
+
+/**
+ * Creates and appends a media item (filename + buttons) to the list in the popup.
+ * @param {{url: string, filename: string}} mediaItem - The media item object to display.
+ */
+function addUrlToPopup(mediaItem) {
+    const { url, filename } = mediaItem;
+    console.debug(`[Popup] Attempting to add media item to UI: ${filename} (${url})`);
+    noUrlsMessage.classList.add('hidden');
+
+    const existingUrlElements = urlListDiv.querySelectorAll('.url-item-text');
+    for (const span of existingUrlElements) {
+        if (span.dataset.originalUrl === url) {
+            console.debug(`[Popup] URL already displayed: ${url}. Skipping.`);
+            return;
         }
-    }, 5000);
-}
+    }
 
-// Also detect dynamically added media
-const observer = new MutationObserver(mutations => {
-    mutations.forEach(mutation => {
-        mutation.addedNodes.forEach(node => {
-            if (node.tagName === 'VIDEO' || node.tagName === 'AUDIO') {
-                node.addEventListener('play', handlePlay);
-            }
-            if (node.querySelectorAll) {
-                node.querySelectorAll('video, audio').forEach(media => {
-                    media.addEventListener('play', handlePlay);
-                });
-            }
-        });
+    const urlItem = document.createElement('div');
+    urlItem.className = 'bg-white p-3 rounded-lg shadow-sm flex items-center justify-between text-sm break-all';
+    urlItem.innerHTML = `
+        <div class="flex-grow pr-2">
+            <span class="url-item-text block line-clamp-2" data-original-url="${url}">${filename}</span>
+        </div>
+        <div class="flex-shrink-0 flex space-x-2">
+            <button class="copy-btn bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-2 rounded-md transition duration-150 ease-in-out">Copy</button>
+            <button class="download-btn bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-2 rounded-md transition duration-150 ease-in-out">Download</button>
+        </div>
+    `;
+
+    urlItem.querySelector('.copy-btn').addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(url);
+            showMessageBox('URL copied to clipboard!', 'success');
+            console.debug(`[Popup] Copied URL to clipboard: ${url}`);
+        } catch (err) {
+            showMessageBox('Failed to copy URL.', 'error');
+            console.error(`[Popup] Error copying to clipboard: ${err}`);
+        }
     });
-});
 
-function handlePlay(event) {
-    // Trigger the same logic as above
-    document.dispatchEvent(new Event('play'));
+    urlItem.querySelector('.download-btn').addEventListener('click', () => {
+        console.debug(`[Popup] Sending initiateSmartDownload request for URL: ${url}, Filename: ${filename}`);
+        browser.runtime.sendMessage({ type: "initiateSmartDownload", url: url, filename: filename, tabId: currentTabId })
+            .then(response => {
+                if (response.success) {
+                    showMessageBox('Download initiated!', 'success');
+                } else {
+                    showMessageBox(`Download failed: ${response.error || 'Unknown error'}`, 'error');
+                }
+            })
+            .catch(error => showMessageBox(`Error initiating smart download: ${error.message}`, 'error'));
+    });
+
+    urlListDiv.appendChild(urlItem);
+    console.debug(`[Popup] Successfully added media item to UI: ${filename}`);
 }
 
-// Start observing
-observer.observe(document, {
-    childList: true,
-    subtree: true
+/**
+ * Function to refresh the URL list in the popup.
+ * @param {{url: string, filename: string}[]} mediaItems - Array of media item objects.
+ */
+function refreshUrlList(mediaItems) {
+    console.debug(`[Popup] Refreshing URL list with ${mediaItems.length} media items.`);
+    urlListDiv.innerHTML = '';
+    if (mediaItems && mediaItems.length > 0) {
+        mediaItems.forEach(item => addUrlToPopup(item));
+        noUrlsMessage.classList.add('hidden');
+        console.debug("[Popup] Hiding 'No URLs found' message.");
+    } else {
+        noUrlsMessage.classList.remove('hidden');
+        console.debug("[Popup] Showing 'No URLs found' message.");
+    }
+}
+
+/**
+ * Updates the server status indicator text and color.
+ * @param {boolean | null} isAlive - true if alive, false if not, null if checking.
+ */
+function updateServerStatusIndicator(isAlive) {
+    serverStatusText.classList.remove('text-green-600', 'text-red-600', 'text-gray-600');
+    if (isAlive === true) {
+        serverStatusText.textContent = 'Nadeko Connection: Alive';
+        serverStatusText.classList.add('text-green-600');
+        console.debug("[Popup] Server status: Alive.");
+    } else if (isAlive === false) {
+        serverStatusText.textContent = 'Nadeko Connection: Not Alive';
+        serverStatusText.classList.add('text-red-600');
+        console.debug("[Popup] Server status: Not Alive.");
+    } else {
+        serverStatusText.textContent = 'Checking connection status...';
+        serverStatusText.classList.add('text-gray-600');
+        console.debug("[Popup] Server status: Checking...");
+    }
+}
+
+/**
+ * Initiates a check for the Nadeko server's liveness.
+ */
+async function checkServerStatus() {
+    updateServerStatusIndicator(null);
+    try {
+        const response = await browser.runtime.sendMessage({ type: "checkLocalhostStatus" });
+        if (response && typeof response.isAlive === 'boolean') {
+            updateServerStatusIndicator(response.isAlive);
+        } else {
+            updateServerStatusIndicator(false);
+            console.warn("[Popup] Malformed response from checkLocalhostStatus:", response);
+        }
+    } catch (error) {
+        updateServerStatusIndicator(false);
+        console.error("[Popup] Error checking server status:", error);
+    }
+}
+
+
+// --- Event Listeners ---
+
+browser.runtime.onMessage.addListener((message) => {
+    console.debug(`[Popup] Message received from background:`, message);
+    if (message.type === "urlAdded" && message.tabId === currentTabId && message.mediaItem) {
+        addUrlToPopup(message.mediaItem);
+        console.debug(`[Popup] New media item received and added: ${message.mediaItem.filename}`);
+    } else if (message.type === "clearUrlsDisplay" && message.tabId === currentTabId) {
+        refreshUrlList([]);
+        console.debug(`[Popup] Display cleared for tab ${currentTabId}`);
+    } else if (message.type === "downloadHandledByNadeko" && message.tabId === currentTabId) {
+        showMessageBox(`Sent ${message.filename} to Nadeko!`, 'success');
+    }
 });
 
-// Attach to existing media
-document.querySelectorAll('video, audio').forEach(media => {
-    media.addEventListener('play', handlePlay);
+document.addEventListener('DOMContentLoaded', async () => {
+    console.debug("[Popup] DOMContentLoaded event fired. Initializing popup.");
+    try {
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        if (tabs[0]) {
+            currentTabId = tabs[0].id;
+            console.debug(`[Popup] Current active tab ID: ${currentTabId}`);
+            console.debug(`[Popup] Requesting media items for tab ID: ${currentTabId}...`);
+
+            const response = await browser.runtime.sendMessage({ type: "getMediaUrls", tabId: currentTabId });
+            console.debug("[Popup] Response from getMediaUrls:", response);
+
+            if (response && response.mediaItems) {
+                refreshUrlList(response.mediaItems);
+            } else {
+                noUrlsMessage.classList.remove('hidden');
+                console.warn("[Popup] No media items received or response was malformed. Showing 'No URLs found' message.");
+            }
+
+            checkServerStatus(); // Initial check for server status
+
+        } else {
+            console.warn("[Popup] No active tab found. Showing 'No URLs found' message.");
+            noUrlsMessage.textContent = "Please ensure a tab is active. No media URLs found yet.";
+            noUrlsMessage.classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error("[Popup] Error initializing popup:", error);
+        noUrlsMessage.textContent = `Error loading URLs: ${error.message}`;
+        noUrlsMessage.classList.remove('hidden');
+        console.debug("[Popup] Showing 'No URLs found' message due to initialization error.");
+    }
+});
+
+clearUrlsBtn.addEventListener('click', async () => {
+    console.debug(`[Popup] Clear URLs button clicked. currentTabId: ${currentTabId}`);
+    if (currentTabId) {
+        try {
+            const response = await browser.runtime.sendMessage({ type: "clearUrls", tabId: currentTabId });
+            if (response && response.success) {
+                refreshUrlList([]);
+                showMessageBox('URLs cleared for this tab.', 'info');
+                console.debug(`[Popup] Sent clearUrls message for tab ${currentTabId}.`);
+            } else {
+                showMessageBox(`Failed to clear URLs: ${response?.error || 'Unknown error'}`, 'error');
+                console.error(`[Popup] Failed to clear URLs for tab ${currentTabId}:`, response);
+            }
+        } catch (error) {
+            showMessageBox(`Error clearing URLs: ${error.message}`, 'error');
+            console.error(`[Popup] Error sending clearUrls message for tab ${currentTabId}:`, error);
+        }
+    } else {
+        showMessageBox('No active tab to clear URLs for.', 'info');
+    }
+});
+
+serverStatusReloadBtn.addEventListener('click', checkServerStatus);
+
+// New: Listener for the configuration button to open a new popup window
+configBtn.addEventListener('click', () => {
+    browser.windows.create({
+        url: browser.runtime.getURL("config/config.html"),
+        type: "popup", // Opens as a small, floating window
+        width: 450, // Adjust size as needed
+        height: 350,
+        left: 100, // Optional: position it
+        top: 100
+    }).catch(error => {
+        console.error("[Popup] Failed to open config window:", error);
+        showMessageBox("Failed to open configuration window.", "error");
+    });
 });

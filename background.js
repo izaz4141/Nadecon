@@ -1,5 +1,9 @@
 // background.js
 
+//=============================================================
+//=================={Nadeko APP Module}========================
+//=============================================================
+
 let nadekoServerPort = 12345; // Default port
 
 // Cache for localhost availability to reduce repeated checks.
@@ -8,9 +12,6 @@ const localhostStatusCache = {
     lastChecked: 0,
     checkInterval: 5000 // Cache for 5 seconds
 };
-
-// Threshold for considering a video/audio file a "fragment" based on Content-Length (2 MB)
-const FRAGMENT_SIZE_THRESHOLD_BYTES = 2 * 1024 * 1024; 
 
 /**
  * Initializes the Nadeko server port from storage.
@@ -30,6 +31,56 @@ async function initNadekoPort() {
 // Call initialization immediately
 initNadekoPort();
 
+/**
+ * @description Sends a given URL and an optional filename to the local Nadeko Downloader application via a POST request.
+ * This function first ensures the Nadeko server's port is initialized, then attempts the network request.
+ * It returns a Promise that resolves on successful transmission or rejects if the request fails.
+ * @param {string} url - The URL to be sent to the Nadeko Downloader for processing (e.g., downloading).
+ * @param {string | null} [filename=null] - An optional desired filename for the downloaded content. If null, the Nadeko app determines the filename.
+ * @returns {Promise<void>} A Promise that resolves if the URL is successfully sent to the Nadeko application, or rejects with an Error if the request fails (due to network issues or an unsuccessful HTTP status).
+ */
+async function sendUrlToApp(url, filename = null) {
+  // Ensure the Nadeko server port is initialized before making the request.
+  // If nadekoServerPort is not set, call initNadekoPort() to determine it.
+  if (!nadekoServerPort) {
+      await initNadekoPort();
+  }
+
+  // Log a debug message indicating the attempt to send the URL, including the target URL, filename, and port.
+  console.debug(`[Background Script] Attempting to send URL to Nadeko App: ${url} (Filename: ${filename}) on port ${nadekoServerPort}`);
+
+  // Return a new Promise to handle the asynchronous fetch operation.
+  return new Promise((resolve, reject) => {
+    // Make a POST request to the local Nadeko server.
+    fetch(`http://localhost:${nadekoServerPort}`, {
+      method: 'POST', // Use the POST method to send data.
+      // Convert the URL and filename into a JSON string for the request body.
+      body: JSON.stringify({ url: url, filename: filename }),
+      // Set the Content-Type header to indicate that the body is JSON.
+      headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+      // Check if the HTTP response status is OK (2xx success code).
+      if (response.ok) {
+        // Log a success message if the URL was sent successfully.
+        console.debug('[Background Script] Successfully sent URL to Nadeko App:', url);
+        // Resolve the Promise, indicating successful completion.
+        resolve();
+      } else {
+        // Log an error message if the request failed (e.g., 4xx or 5xx status code).
+        console.error('[Background Script] Failed to send URL to Nadeko application. Status:', response.status);
+        // Reject the Promise with an Error containing the HTTP status.
+        reject(new Error(`Failed to send URL. Status: ${response.status}`));
+      }
+    })
+    .catch(error => {
+      // Catch any network errors or other issues that occurred during the fetch operation.
+      console.error('[Background Script] Error sending URL to Nadeko App:', error);
+      // Reject the Promise with the caught error.
+      reject(error);
+    });
+  });
+}
 
 /**
  * Checks if the local application on localhost:nadekoServerPort is alive.
@@ -70,36 +121,6 @@ async function isLocalhostAlive(forceCheck = false) {
 }
 
 
-// Function to send URL to a local application (Nadeko Downloader)
-async function sendUrlToApp(url, filename = null) {
-  if (!nadekoServerPort) {
-      await initNadekoPort();
-  }
-
-  console.debug(`[Background Script] Attempting to send URL to Nadeko App: ${url} (Filename: ${filename}) on port ${nadekoServerPort}`);
-
-  return new Promise((resolve, reject) => {
-    fetch(`http://localhost:${nadekoServerPort}`, {
-      method: 'POST',
-      body: JSON.stringify({ url: url, filename: filename }),
-          headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => {
-      if (response.ok) {
-        console.debug('[Background Script] Successfully sent URL to Nadeko App:', url);
-        resolve();
-      } else {
-        console.error('[Background Script] Failed to send URL to Nadeko application. Status:', response.status);
-        reject(new Error(`Failed to send URL. Status: ${response.status}`));
-      }
-    })
-    .catch(error => {
-      console.error('[Background Script] Error sending URL to Nadeko App:', error);
-      reject(error);
-    });
-  });
-}
-
 // Create a context menu item for "Send to Nadeko"
 browser.contextMenus.create({
   id: "send-to-nadeko",
@@ -123,14 +144,9 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
-
-// Using a Map to store unique media URLs found across all tabs
-// Structure: Map<tabId, Map<url, {url, filename, validMedia, isManifest, isFragment}>>
-const scrapedMediaUrls = new Map();
-
-// Cache for fetchMediaHeaders results.
-const mediaDetailsCache = new Map();
-
+//=============================================================
+//==================={Url Info Sraper}=========================
+//=============================================================
 /**
  * Performs a HEAD request to get Content-Type, Content-Disposition, and Content-Length headers.
  * @param {string} url - The URL to check.
@@ -185,6 +201,49 @@ async function fetchMediaHeaders(url) {
     return promise;
 }
 
+/**
+ * Sanitizes a string to be a valid filename.
+ * @param {string} filename - The original filename.
+ * @returns {string} - The sanitized filename.
+ */
+function sanitizeFilenameCharacters(filename) {
+    const lastDotIndex = filename.lastIndexOf('.');
+    let namePart = filename;
+    let extPart = '';
+
+    if (lastDotIndex > 0) {
+        namePart = filename.substring(0, lastDotIndex);
+        extPart = filename.substring(lastDotIndex);
+    }
+
+    namePart = namePart.replace(/[/?%*:|"<>\\/]/g, '_');
+    namePart = namePart.replace(/^\.+|\.+$/g, '').trim();
+
+    let cleanedFilename = namePart + extPart;
+
+    const MAX_LENGTH = 200;
+    if (cleanedFilename.length > MAX_LENGTH) {
+        if (lastDotIndex > 0) {
+            const originalNameLength = namePart.length;
+            const originalExtLength = extPart.length;
+            const availableNameLength = MAX_LENGTH - originalExtLength;
+
+            if (availableNameLength > 0) {
+                cleanedFilename = namePart.substring(0, availableNameLength) + extPart;
+            } else {
+                cleanedFilename = extPart.substring(0, MAX_LENGTH);
+            }
+        } else {
+            cleanedFilename = cleanedFilename.substring(0, MAX_LENGTH);
+        }
+    }
+
+    if (cleanedFilename.length === 0) {
+        return 'downloaded_file';
+    }
+
+    return cleanedFilename;
+}
 
 /**
  * Derives a suitable filename from a URL, Content-Type, and Content-Disposition.
@@ -261,70 +320,90 @@ function deriveFilename(url, contentType, contentDisposition) {
     return filename;
 }
 
-
 /**
- * Sanitizes a string to be a valid filename.
- * @param {string} filename - The original filename.
- * @returns {string} - The sanitized filename.
+ * Modifies a given URL to remove 'bytestart' and 'byteend' query parameters,
+ * and then sorts the remaining query parameters alphabetically.
+ * This can be used to request the full file instead of a partial one,
+ * and to get a canonical URL for comparison.
+ *
+ * @param {string} originalUrl The original URL string which might contain byte range parameters.
+ * @returns {string} The modified URL string with 'bytestart' and 'byteend' parameters removed
+ * and the remaining query parameters sorted.
  */
-function sanitizeFilenameCharacters(filename) {
-    const lastDotIndex = filename.lastIndexOf('.');
-    let namePart = filename;
-    let extPart = '';
+function modifyParams(originalUrl) {
+    try {
+        const url = new URL(originalUrl);
 
-    if (lastDotIndex > 0) {
-        namePart = filename.substring(0, lastDotIndex);
-        extPart = filename.substring(lastDotIndex);
-    }
-
-    namePart = namePart.replace(/[/?%*:|"<>\\/]/g, '_');
-    namePart = namePart.replace(/^\.+|\.+$/g, '').trim();
-
-    let cleanedFilename = namePart + extPart;
-
-    const MAX_LENGTH = 200;
-    if (cleanedFilename.length > MAX_LENGTH) {
-        if (lastDotIndex > 0) {
-            const originalNameLength = namePart.length;
-            const originalExtLength = extPart.length;
-            const availableNameLength = MAX_LENGTH - originalExtLength;
-
-            if (availableNameLength > 0) {
-                cleanedFilename = namePart.substring(0, availableNameLength) + extPart;
-            } else {
-                cleanedFilename = extPart.substring(0, MAX_LENGTH);
-            }
-        } else {
-            cleanedFilename = cleanedFilename.substring(0, MAX_LENGTH);
+        // Delete the 'bytestart' parameter if it exists
+        if (url.searchParams.has('bytestart')) {
+            url.searchParams.delete('bytestart');
         }
-    }
+        // Delete the 'byteend' parameter if it exists
+        if (url.searchParams.has('byteend')) {
+            url.searchParams.delete('byteend');
+        }
 
-    if (cleanedFilename.length === 0) {
-        return 'downloaded_file';
-    }
+        if (url.searchParams.has('_nc_cat')) {
+            url.searchParams.delete('_nc_cat')
+        }
 
-    return cleanedFilename;
+        // Get all remaining parameters as an array of [key, value] pairs
+        const params = Array.from(url.searchParams.entries());
+
+        // Sort the parameters alphabetically by key.
+        // If keys are identical, sort by value to ensure stable sorting.
+        params.sort((a, b) => {
+            // Compare keys first
+            const keyComparison = a[0].localeCompare(b[0]);
+            if (keyComparison !== 0) {
+                return keyComparison;
+            }
+            // If keys are the same, compare values
+            return a[1].localeCompare(b[1]);
+        });
+
+        // Clear existing search parameters to replace with sorted ones
+        url.search = ''; // This effectively clears all parameters and the '?'
+
+        // Append the sorted parameters back to the URL's searchParams
+        for (const [key, value] of params) {
+            url.searchParams.append(key, value);
+        }
+
+        // Return the reconstructed URL with sorted parameters
+        return url.toString();
+    } catch (error) {
+        // Log an error if the URL is invalid and return the original URL
+        console.error("Error parsing or modifying URL:", error);
+        return originalUrl;
+    }
 }
 
 
+//==============================================================
+//================={Media Scraper Module}=======================
+//==============================================================
+
+// Using a Map to store unique media URLs found across all tabs
+// Structure: Map<tabId, Map<url, {url, filename, validMedia, isManifest}>>
+const scrapedMediaUrls = new Map();
+
+// Cache for fetchMediaHeaders results.
+const mediaDetailsCache = new Map();
+
 
 /**
- * Gets full media details (validity, content type, derived filename, isManifest flag, isFragment flag) for a given URL.
+ * Gets full media details (validity, content type, derived filename, isManifest flag for a given URL.
  * @param {string} url - The URL of the potential media.
- * @returns {Promise<{url: string, filename: string, validMedia: boolean, isManifest: boolean, isFragment: boolean}>}
+ * @returns {Promise<{url: string, filename: string, validMedia: boolean, isManifest: boolean}>}
  */
 async function getMediaDetails(url) {
+    url = modifyParams(url);
     const { valid, contentType, contentDisposition, contentLength } = await fetchMediaHeaders(url);
     const filename = deriveFilename(url, contentType, contentDisposition);
-
     const isManifest = contentType && (contentType.includes('mpegurl') || contentType.includes('dash+xml'));
 
-    // A URL is considered a fragment if it's video/audio and its size is below a threshold, AND it's not a manifest
-    const isFragment = (contentType && (contentType.startsWith('video/') || contentType.startsWith('audio/'))) && 
-                       (contentLength !== null && contentLength < FRAGMENT_SIZE_THRESHOLD_BYTES) &&
-                       !isManifest; // Ensure manifests themselves aren't marked as fragments by size alone
-
-    return { url, filename, validMedia: valid, isManifest: isManifest, isFragment: isFragment };
+    return { url, filename, validMedia: valid, isManifest: isManifest };
 }
 
 
@@ -342,12 +421,6 @@ async function addMediaUrl(tabId, url, source) {
     return;
   }
 
-  // IMPORTANT FILTERING LOGIC: Do not add fragments unless they are also manifests
-  if (mediaItem.isFragment && !mediaItem.isManifest) {
-      console.debug(`[Background Script] Skipping fragment URL for tab ${tabId}: ${mediaItem.filename} (${mediaItem.url}) (Type: General Media, but fragment)`);
-      return; 
-  }
-
   if (!scrapedMediaUrls.has(tabId)) {
     scrapedMediaUrls.set(tabId, new Map()); // Use a Map for media items per tab, keyed by URL
   }
@@ -357,7 +430,7 @@ async function addMediaUrl(tabId, url, source) {
   if (urlsForTab.has(mediaItem.url)) {
       console.debug(`[Background Script] URL ${mediaItem.url} already exists for tab ${tabId}. Skipping.`);
       return;
-  }
+  } 
 
   // Add the new media item to the tab's map
   urlsForTab.set(mediaItem.url, mediaItem);
@@ -366,7 +439,7 @@ async function addMediaUrl(tabId, url, source) {
   if (mediaItem.isManifest) {
       logMessage += " (Type: Manifest)";
   } else {
-      logMessage += " (Type: General Media)"; // Will only be 'General Media' for full files after fragment filter
+      logMessage += " (Type: General Media)"; // Will only be 'General Media' for full files 
   }
   console.debug(logMessage);
     
@@ -400,7 +473,6 @@ function isLikelyMediaXHR(url) {
     // These are often internal Facebook API endpoints that are NOT media.
     if (url.includes('facebook.com') || url.includes('fbcdn.net')) {
         if (url.includes('/ajax/') || url.includes('bootloader-endpoint') || url.includes('graphql')) {
-            console.debug(`[Background Script] Skipping known Facebook internal API URL: ${url}`);
             return false;
         }
     }
@@ -552,20 +624,7 @@ browser.webRequest.onHeadersReceived.addListener(
             // AND not explicitly inline, treat as potential download.
             // This is typically how fragmented pieces get loaded.
             if (details.type === 'main_frame' && (!contentDisposition || !contentDisposition.toLowerCase().includes('inline'))) {
-                // If it's a video/audio in main frame and it's small, it's likely a fragment.
-                // We now have `contentLength` to help with this heuristic.
-                if (contentLength !== null && contentLength < FRAGMENT_SIZE_THRESHOLD_BYTES) {
-                    // Do NOT treat as a browser download if it's a small fragment
-                    // The idea is to let Nadeko handle the manifests.
-                    // This is a subtle point: if a fragment IS somehow triggered as a download,
-                    // we still want to pass it to Nadeko if Nadeko is alive, but not
-                    // fall back to browser.downloads.download if it's a fragment.
-                    // For now, let's keep `isDownload = true` here so it goes to handleInterceptedDownload.
-                    // The `handleInterceptedDownload` will then determine if it's sent to Nadeko.
-                     isDownload = true;
-                } else {
-                    isDownload = true; // Treat as download if large video/audio in main frame
-                }
+                isDownload = true; // Treat as download if large video/audio in main frame
             }
         }
         // Explicitly handle manifest types if they somehow trigger a download, though rare

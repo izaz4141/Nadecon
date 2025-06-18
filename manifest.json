@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "NadeCon",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "author": "Glicole",
   "description": "Detects media from pages and connects to Nadeko Downloader",
   "icons": {

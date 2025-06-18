@@ -1,0 +1,62 @@
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+/* Custom styles for the toggle switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 60px; /* Width of the switch */
+    height: 34px; /* Height of the switch */
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc; /* Background when off */
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 34px; /* Rounded corners for the slider track */
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px; /* Height of the thumb */
+    width: 26px; /* Width of the thumb */
+    left: 4px; /* Initial position of the thumb */
+    bottom: 4px; /* Initial position of the thumb */
+    background-color: white; /* Color of the thumb */
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 50%; /* Make the thumb round */
+}
+
+input:checked + .slider {
+    background-color: #22c55e; /* Green background when on */
+}
+
+input:focus + .slider {
+    box-shadow: 0 0 1px #22c55e;
+}
+
+input:checked + .slider:before {
+    -webkit-transform: translateX(26px); /* Move thumb to the right when on */
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+}

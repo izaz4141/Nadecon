@@ -5,6 +5,7 @@
 //=============================================================
 
 let nadekoServerPort = 12345; // Default port
+let showPopup = true
 
 // Cache for localhost availability to reduce repeated checks.
 const localhostStatusCache = {
@@ -17,19 +18,21 @@ const localhostStatusCache = {
  * Initializes the Nadeko server port from storage.
  * This should be called once at the start of the background script.
  */
-async function initNadekoPort() {
+async function initConfig() {
     try {
         const result = await browser.storage.local.get('nadekoPort');
+        const checkedValue = await browser.storage.local.get('showPopup');
         nadekoServerPort = result.nadekoPort || 12345;
-        console.debug(`[Background Script] Initialized Nadeko server port: ${nadekoServerPort}`);
+        showPopup = checkedValue.showPopup == 'true' ? true : (checkedValue.showPopup === 'false' ? false : DEFAULT_SHOW);
     } catch (error) {
         console.error('[Background Script] Error initializing Nadeko port from storage:', error);
         nadekoServerPort = 12345; // Fallback to default
+        showPopup = true
     }
 }
 
 // Call initialization immediately
-initNadekoPort();
+initConfig();
 
 /**
  * @description Sends a given URL and an optional filename to the local Nadeko Downloader application via a POST request.
@@ -41,9 +44,9 @@ initNadekoPort();
  */
 async function sendUrlToApp(url, filename = null) {
   // Ensure the Nadeko server port is initialized before making the request.
-  // If nadekoServerPort is not set, call initNadekoPort() to determine it.
+  // If nadekoServerPort is not set, call initConfig() to determine it.
   if (!nadekoServerPort) {
-      await initNadekoPort();
+      await initConfig();
   }
 
   // Log a debug message indicating the attempt to send the URL, including the target URL, filename, and port.
@@ -415,90 +418,116 @@ async function getMediaDetails(url) {
  * @param {string} source - 'webRequest' or 'contentScript' to indicate where the URL came from.
  */
 async function addMediaUrl(tabId, url, source) {
-  const mediaItem = await getMediaDetails(url);
+    const mediaItem = await getMediaDetails(url);
 
-  if (!mediaItem.validMedia) {
-    return;
-  }
+    if (!mediaItem.validMedia) {
+        return;
+    }
 
-  if (!scrapedMediaUrls.has(tabId)) {
-    scrapedMediaUrls.set(tabId, new Map()); // Use a Map for media items per tab, keyed by URL
-  }
-  const urlsForTab = scrapedMediaUrls.get(tabId);
+    if (!scrapedMediaUrls.has(tabId)) {
+        scrapedMediaUrls.set(tabId, new Map()); // Use a Map for media items per tab, keyed by URL
+    }
+    const urlsForTab = scrapedMediaUrls.get(tabId);
 
-  // Check if exact URL already exists to prevent true duplicates
-  if (urlsForTab.has(mediaItem.url)) {
-      console.debug(`[Background Script] URL ${mediaItem.url} already exists for tab ${tabId}. Skipping.`);
-      return;
-  } 
+    // Check if exact URL already exists to prevent true duplicates
+    if (urlsForTab.has(mediaItem.url)) {
+        console.debug(`[Background Script] URL ${mediaItem.url} already exists for tab ${tabId}. Skipping.`);
+        return;
+    }
 
-  // Add the new media item to the tab's map
-  urlsForTab.set(mediaItem.url, mediaItem);
+    // Add the new media item to the tab's map
+    urlsForTab.set(mediaItem.url, mediaItem);
 
-  let logMessage = `[Background Script] Added media item for tab ${tabId} (${source}): ${mediaItem.filename} (${mediaItem.url})`;
-  if (mediaItem.isManifest) {
-      logMessage += " (Type: Manifest)";
-  } else {
-      logMessage += " (Type: General Media)"; // Will only be 'General Media' for full files 
-  }
-  console.debug(logMessage);
-    
-  // Notify the main browser action popup to update its list
-  browser.runtime.sendMessage({ type: "urlAdded", mediaItem: mediaItem, tabId: tabId }).catch(error => {
-      // This is fine if the popup isn't open
-  });
+    let logMessage = `[Background Script] Added media item for tab ${tabId} (${source}): ${mediaItem.filename} (${mediaItem.url})`;
+    if (mediaItem.isManifest) {
+        logMessage += " (Type: Manifest)";
+    } else {
+        logMessage += " (Type: General Media)"; // Will only be 'General Media' for full files 
+    }
+    console.debug(logMessage);
 
-  // Only send message to content script if tabId is valid (>= 0)
-  if (tabId >= 0) {
-      // Send message to content script for popup display
-      browser.tabs.sendMessage(tabId, {
-          type: "showMediaPopup",
-          mediaItem: mediaItem
-      }).catch(error => {
-          console.warn(`[Background Script] Could not send showMediaPopup to tab ${tabId}:`, error);
-      });
-  } else {
-      console.debug(`[Background Script] Skipping showMediaPopup for invalid tabId: ${tabId}.`);
-  }
+    // Notify the main browser action popup to update its list
+    browser.runtime.sendMessage({ type: "urlAdded", mediaItem: mediaItem, tabId: tabId }).catch(error => {
+        // This is fine if the popup isn't open
+    });
+
+    // Only send message to content script if tabId is valid (>= 0)
+    if (tabId >= 0 && showPopup) {
+        // Send message to content script for popup display
+        browser.tabs.sendMessage(tabId, {
+            type: "showMediaPopup",
+            mediaItem: mediaItem
+        }).catch(error => {
+            console.warn(`[Background Script] Could not send showMediaPopup to tab ${tabId}:`, error);
+        });
+    } else {
+        console.debug(`[Background Script] Skipping showMediaPopup for invalid tabId: ${tabId}.`);
+    }
 }
 
 /**
  * Checks if an XHR URL is likely related to media, based on its path and query parameters.
- * This is a heuristic to reduce unnecessary HEAD requests.
+ * This is a heuristic to reduce unnecessary HEAD requests and improve detection accuracy.
  * @param {string} url - The XHR URL to check.
  * @returns {boolean} - True if the URL is likely a media stream/manifest/segment.
  */
 function isLikelyMediaXHR(url) {
+    // Convert URL to lowercase for case-insensitive matching
+    const lowerUrl = url.toLowerCase();
+
     // 1. **Prioritize explicit exclusions for known non-media internal APIs**
-    // These are often internal Facebook API endpoints that are NOT media.
-    if (url.includes('facebook.com') || url.includes('fbcdn.net')) {
-        if (url.includes('/ajax/') || url.includes('bootloader-endpoint') || url.includes('graphql')) {
+    // These are often internal Facebook API endpoints or general analytics/tracking endpoints that are NOT media.
+    if (lowerUrl.includes('facebook.com') || lowerUrl.includes('fbcdn.net')) {
+        // Specific Facebook internal API patterns to exclude
+        if (lowerUrl.includes('/ajax/') || lowerUrl.includes('bootloader-endpoint') || lowerUrl.includes('graphql') || lowerUrl.includes('/xp/') || lowerUrl.includes('/intern/')) {
+            return false;
+        }
+    }
+    // General exclusions for common non-media patterns found in many web applications.
+    // This check is performed only if the URL does NOT contain strong media hints,
+    // to prevent false negatives for legitimate media URLs that might contain these strings.
+    if (lowerUrl.includes('/api/') || lowerUrl.includes('/track/') || lowerUrl.includes('/log/') || lowerUrl.includes('/analytics/') || lowerUrl.includes('/metric/') || lowerUrl.includes('/config/') || lowerUrl.includes('/preferences/')) {
+        // If it looks like an API/tracking URL, verify it's not also a media URL before excluding.
+        if (!lowerUrl.match(/\.(m3u8|mpd|ts|mp4|webm|m4s|fmp4|aac|mp3|ogg|flac|wav|mov|avi|wmv|flv)(\?.*)?$|\/(hls|dash|stream|video|audio|playlist|manifest)/)) {
             return false;
         }
     }
 
-    // 2. **Check for media-specific extensions and patterns**
-    const mediaExtensions = /\.(m3u8|mpd|ts|aac|mp4|webm|m4s|mp4a|vtt|f4m|ism|isml|dash|json|bin|dat|fmp4)(\?.*)?$/i;
-    const streamingPatterns = /(chunk|segment|playlist|manifest|stream|video|audio|hls|dash|drm|playable_url|video_play|stream_src)/i;
+    // 2. **Check for media-specific extensions and patterns (High Confidence)**
+    // This regex looks for common media file extensions and subtitle formats.
+    const mediaExtensions = /\.(m3u8|mpd|ts|mp4|webm|m4s|mp4a|fmp4|aac|mp3|ogg|flac|wav|mov|avi|wmv|flv|vtt|srt|ass|scc|opus|ogv|mkv)(\?.*)?$/i;
+    // This regex looks for common keywords in the URL path or query string that indicate streaming media.
+    const streamingPatterns = /(chunk|segment|playlist|manifest|stream|video|audio|hls|dash|drm|playable_url|video_play|stream_src|media|file=|\?src=|\?url=|\?video=|\?audio=|\.m3u8|\.mpd|\.ism|\.isml)/i;
 
-    if (mediaExtensions.test(url) || streamingPatterns.test(url)) {
+    if (mediaExtensions.test(lowerUrl) || streamingPatterns.test(lowerUrl)) {
         return true;
     }
 
-    // 3. **Broad domain checks (after more specific checks)**
-    // These are domains frequently associated with media.
-    const knownMediaDomains = /(youtube\.com|vimeo\.com|cdn\.videoplatform\.com|akamaihd\.net|cloudfront\.net|mediaservices\.windows\.net|video\.twimg\.com|cdninstagram\.com|v\.redd\.it)/i;
-    if (knownMediaDomains.test(url)) {
+    // 3. **Broad domain checks (Medium Confidence)**
+    // This regex includes a wider range of known media platforms, CDNs, and cloud storage providers
+    // that commonly host media content.
+    const knownMediaDomains = /(youtube\.com|vimeo\.com|cdn\.videoplatform\.com|akamaihd\.net|cloudfront\.net|mediaservices\.windows\.net|video\.twimg\.com|cdninstagram\.com|v\.redd\.it|twitch\.tv|dailymotion\.com|wistia\.com|jwplatform\.com|brightcove\.com|kaltura\.com|vzaar\.com|vidyard\.com|mixcloud\.com|soundcloud\.com|bandcamp\.com|spotifycdn\.com|apple\.com\/hls|hulu\.com|netflix\.com|amazon\.com\/video|disneyplus\.com|hbomax\.com|paramountplus\.com|peacocktv\.com|plex\.tv|jellyfin\.org|s3\.amazonaws\.com|storage\.googleapis\.com|blob\.core\.windows\.net|firebasestorage\.googleapis\.com|s\.ytimg\.com|i\.ytimg\.com|vimeocdn\.com|akamaized\.net|fbcdn\.net\/v|cdn\.flowplayer\.org|d\.tube|bitchute\.com|odysee\.com|rumble\.com|bilibili\.com|youku\.com|qq\.com|iqiyi\.com|v\.douyin\.com|v\.kuaishou\.com|cdn[0-9]?\.stream|stream[0-9]?\.cdn|content\.jwplatform\.com|media\.licdn\.com|azureedge\.net|cdn\.plyr\.io|player\.vimeo\.com|players\.brightcove\.net|wmedia\.video|v\.redd\.it)/i;
+    if (knownMediaDomains.test(lowerUrl)) {
         return true;
     }
 
-    // 4. **Heuristic for JSON responses that might contain media URLs**
-    // This is still a heuristic; actual JSON parsing for embedded URLs would be a separate step.
-    if (url.includes('.json') && (url.includes('video_play') || url.includes('stream_src') || url.includes('playable_url'))) {
+    // 4. **Heuristic for JSON responses that might contain media URLs (Lower Confidence, but useful for API responses)**
+    // This checks for URLs ending in `.json` that also contain keywords commonly found in media-related API responses,
+    // where the actual media URL might be embedded within the JSON payload.
+    if (lowerUrl.includes('.json') && (lowerUrl.includes('video_play') || lowerUrl.includes('stream_src') || lowerUrl.includes('playable_url') || lowerUrl.includes('media_url') || lowerUrl.includes('manifest_url') || lowerUrl.includes('hls_url') || lowerUrl.includes('dash_url'))) {
         return true;
     }
 
-    return false; // If none of the above criteria are met, it's not likely media
+    // 5. **Generic 'data' or 'file' paths with potential media indicators (Lowest Confidence, used as a last resort)**
+    // This aims to catch cases where media might be served from generic paths like `/data/` or `/files/`
+    // but only if combined with other subtle media hints (like 'video', 'audio', 'stream' keywords or file extensions).
+    if ((lowerUrl.includes('/data/') || lowerUrl.includes('/files/')) &&
+        (lowerUrl.includes('video') || lowerUrl.includes('audio') || lowerUrl.includes('stream') || mediaExtensions.test(lowerUrl) || streamingPatterns.test(lowerUrl))) {
+        return true;
+    }
+
+    // If none of the above criteria are met, it's not likely media
+    return false;
 }
 
 // --- WebRequest Listener for detecting media and general downloads ---
@@ -509,10 +538,15 @@ browser.webRequest.onBeforeRequest.addListener(
     const relevantResourceTypes = ['media', 'object', 'sub_frame', 'xmlhttprequest'];
 
     if (relevantResourceTypes.includes(details.type)) {
+        if (details.tabId < 0) {
+            return
+        }
         // For sub_frames, specifically target known video embeds (if they are not already handled by general XHR)
         if (details.type === 'sub_frame') {
             if (details.url.includes('youtube.com/embed/') || details.url.includes('vimeo.com/video/')) {
-                addMediaUrl(details.tabId, details.url, 'webRequest');
+                addMediaUrl(details.tabId, details.url, 'webRequest').catch(error => {
+                    console.error(`[Background Script] Error adding URL from sub_frame webRequest: ${details.url}`, error);
+                });
             }
         } else if (details.type === 'xmlhttprequest') { // Corrected the typo 'xmlhtthttprequest'
             // Only process XHRs that are likely media or streaming manifests based on URL patterns
@@ -690,10 +724,9 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
           });
       return true;
   }
-  else if (message.type === "portChanged") {
-      const newPort = message.newPort;
-      nadekoServerPort = newPort;
-      console.debug(`[Background Script] Nadeko server port updated to: ${newPort} from options page.`);
+  else if (message.type === "configChanged") {
+      nadekoServerPort = message.newPort;
+      showPopup = message.showChecked == 'true' ? true : (message.showChecked === 'false' ? false : DEFAULT_SHOW);
       localhostStatusCache.lastChecked = 0; // Clear cache so new port is checked
       sendResponse({ success: true });
       return true;
@@ -736,7 +769,6 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 browser.tabs.onRemoved.addListener((tabId) => {
     scrapedMediaUrls.delete(tabId); // Remove entries for the closed tab
     console.debug(`Removed URLs for closed tab ${tabId}`);
-    // No need to clear mediaDetailsCache here, it's global and can benefit other tabs.
 });
 
 browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -744,8 +776,5 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.url && scrapedMediaUrls.has(tabId)) {
         scrapedMediaUrls.delete(tabId);
         console.debug(`Cleared URLs for tab ${tabId} due to navigation.`);
-        // No need to clear mediaDetailsCache here.
-        // When a tab navigates, its content script reloads, so old popups are naturally cleared.
-        // No explicit 'closeAllPopups' message needed here as the content script is re-injected.
     }
 });

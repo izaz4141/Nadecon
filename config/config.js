@@ -1,11 +1,14 @@
 // config/config.js
 
 const serverPortInput = document.getElementById('serverPort');
+const showPopupCheckbox = document.getElementById('showPopup');
+
 const saveBtn = document.getElementById('saveBtn');
 const statusMessage = document.getElementById('statusMessage');
 const portError = document.getElementById('portError');
 
 const DEFAULT_PORT = 12345;
+const DEFAULT_SHOW = true
 
 /**
  * Displays a temporary status message to the user.
@@ -39,7 +42,8 @@ async function loadOptions() {
     try {
         const result = await browser.storage.local.get('nadekoPort');
         serverPortInput.value = result.nadekoPort || DEFAULT_PORT;
-        console.log(`[Config] Loaded port: ${serverPortInput.value}`);
+        const checkedValue = await browser.storage.local.get('showPopup');
+        showPopupCheckbox.checked = checkedValue.showPopup === 'true' ? true : (checkedValue.showPopup === 'false' ? false : DEFAULT_SHOW);
     } catch (error) {
         console.error('[Config] Error loading options:', error);
         serverPortInput.value = DEFAULT_PORT;
@@ -53,6 +57,7 @@ async function loadOptions() {
 async function saveOptions() {
     portError.classList.add('hidden');
     const port = parseInt(serverPortInput.value, 10);
+    const isChecked = showPopupCheckbox.checked.toString();
 
     if (isNaN(port) || port < 1 || port > 65535) {
         portError.classList.remove('hidden');
@@ -62,11 +67,13 @@ async function saveOptions() {
 
     try {
         await browser.storage.local.set({ nadekoPort: port });
-        console.log(`[Config] Saved port: ${port}`);
+        await browser.storage.local.set({ showPopup: isChecked })
+
+        console.debug(`[Config[ Succesfully set port to ${port} and show to ${isChecked}`)
         showStatusMessage('Settings saved successfully!', 'success');
 
         // Notify background script of port change to refresh cache immediately
-        browser.runtime.sendMessage({ type: "portChanged", newPort: port }).catch(e => {
+        browser.runtime.sendMessage({ type: "settingChanged", newPort: port, showChecked: isChecked }).catch(e => {
             console.warn("[Config] Could not notify background script of port change:", e);
         });
 
